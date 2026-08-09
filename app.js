@@ -5,24 +5,22 @@ if (tg) {
   tg.expand();
 }
 
-
 /* =========================================================
    НАСТРОЙКИ
 ========================================================= */
 
 const CONFIG = {
-
-  // ТВОЯ ЛИЧКА
+  // ТВОЙ ПРОФИЛЬ
   profile: "https://t.me/lizorgin",
 
-  // Твой Telegram-канал
-  telegram: "https://t.me/lizorgin_store",
+  // Отзывы
+  reviews: "https://t.me/reviews_lizorgin",
 
   // Пост с обзорами
   overview: "https://t.me/lizorgin_store/10",
 
-  // Отзывы
-  reviews: "https://t.me/reviews_lizorgin"
+  // Telegram-канал
+  telegram: "https://t.me/lizorgin_store"
 };
 
 
@@ -48,7 +46,6 @@ let cart = JSON.parse(
 );
 
 let activeCat = "Все";
-
 let selected = null;
 
 
@@ -61,9 +58,7 @@ const $ = (selector) =>
 
 
 function money(value) {
-
-  return `${Number(value).toLocaleString("ru-RU")} грн.`;
-
+  return `${Number(value || 0).toLocaleString("ru-RU")} грн.`;
 }
 
 
@@ -74,15 +69,11 @@ function toast(text) {
   if (!el) return;
 
   el.textContent = text;
-
   el.classList.remove("hidden");
 
   setTimeout(() => {
-
     el.classList.add("hidden");
-
   }, 1800);
-
 }
 
 
@@ -92,36 +83,40 @@ function saveCart() {
     "lizorgin_cart",
     JSON.stringify(cart)
   );
-
 }
 
 
 /* =========================================================
-   TELEGRAM LINK
+   ОТКРЫТЬ ПРОФИЛЬ LIZORGIN
 ========================================================= */
 
-function openTG(kind, text = "") {
+function openProfile() {
 
-  let url = CONFIG[kind];
+  if (tg?.openTelegramLink) {
+
+    tg.openTelegramLink(
+      CONFIG.profile
+    );
+
+  } else {
+
+    window.open(
+      CONFIG.profile,
+      "_blank"
+    );
+  }
+}
+
+
+/* =========================================================
+   TELEGRAM ССЫЛКИ
+========================================================= */
+
+function openTG(kind) {
+
+  const url = CONFIG[kind];
 
   if (!url) return;
-
-
-  /*
-    Добавляем готовый текст сообщения.
-
-    Например:
-
-    https://t.me/lizorgin?text=Здравствуйте...
-  */
-
-  if (text) {
-
-    url += "?text=" +
-      encodeURIComponent(text);
-
-  }
-
 
   if (tg?.openTelegramLink) {
 
@@ -130,28 +125,12 @@ function openTG(kind, text = "") {
   } else {
 
     window.open(url, "_blank");
-
   }
-
 }
 
 
 /* =========================================================
-   ОТКРЫТЬ ЛИЧКУ С ГОТОВЫМ СООБЩЕНИЕМ
-========================================================= */
-
-function contactMe(text) {
-
-  openTG(
-    "profile",
-    text
-  );
-
-}
-
-
-/* =========================================================
-   ЗАГРУЗКА ТОВАРОВ
+   SUPABASE — ТОВАРЫ
 ========================================================= */
 
 async function loadProducts() {
@@ -159,22 +138,15 @@ async function loadProducts() {
   try {
 
     const response = await fetch(
-
       `${SUPABASE_URL}/rest/v1/accounts?select=*&status=eq.available&order=id.desc`,
-
       {
+        method: "GET",
 
         headers: {
-
           "apikey": SUPABASE_KEY,
-
-          "Authorization":
-            `Bearer ${SUPABASE_KEY}`
-
+          "Authorization": `Bearer ${SUPABASE_KEY}`
         }
-
       }
-
     );
 
 
@@ -194,32 +166,35 @@ async function loadProducts() {
       `;
 
       return;
-
     }
 
 
-    const data =
-      await response.json();
+    const data = await response.json();
 
 
-    products = data.map(p => ({
+    products = data.map(product => ({
 
-      id: p.id,
+      id: product.id,
 
       cat:
-        p.category || "Другое",
+        product.category ||
+        "Другое",
 
       title:
-        p.title || "Аккаунт",
+        product.title ||
+        "Аккаунт",
 
       price:
-        Number(p.price || 0),
+        Number(product.price || 0),
 
       desc:
-        p.description || "",
+        product.description ||
+        "",
 
       img:
-        normalizeImage(p.image_url),
+        normalizeImage(
+          product.image_url
+        ),
 
       review:
         CONFIG.overview
@@ -227,10 +202,19 @@ async function loadProducts() {
     }));
 
 
+    // Если товар удалили из Supabase,
+    // убираем его и из корзины.
+    cart = cart.filter(id =>
+      products.some(
+        p =>
+          Number(p.id) === Number(id)
+      )
+    );
+
+    saveCart();
+
     cats();
-
     render();
-
 
   } catch (error) {
 
@@ -239,16 +223,13 @@ async function loadProducts() {
       error
     );
 
-
     $("#products").innerHTML = `
       <div class="muted"
            style="padding:30px;text-align:center">
         ❌ Ошибка загрузки товаров
       </div>
     `;
-
   }
-
 }
 
 
@@ -261,28 +242,36 @@ function normalizeImage(url) {
   if (!url) {
 
     return "https://placehold.co/900x900/27415c/ffffff?text=PUBG";
-
   }
 
 
   /*
-    Старый Telegram file_id браузер показать не может.
-    Если такой товар ещё остался — показываем заглушку.
+    Если в базе уже нормальная ссылка Supabase Storage,
+    оставляем её без изменений.
   */
 
   if (
-    String(url).startsWith(
-      "telegram_file_id:"
-    )
+    url.startsWith("http://") ||
+    url.startsWith("https://")
   ) {
 
-    return "https://placehold.co/900x900/27415c/ffffff?text=PHOTO";
-
+    return url;
   }
 
 
-  return url;
+  /*
+    Старые telegram_file_id больше не используем.
+  */
 
+  if (
+    url.startsWith("telegram_file_id:")
+  ) {
+
+    return "https://placehold.co/900x900/27415c/ffffff?text=PHOTO";
+  }
+
+
+  return "https://placehold.co/900x900/27415c/ffffff?text=PUBG";
 }
 
 
@@ -293,25 +282,29 @@ function normalizeImage(url) {
 function cats() {
 
   const list = [
-
     "Все",
-
     ...new Set(
-      products.map(p => p.cat)
+      products.map(
+        p => p.cat
+      )
     )
-
   ];
 
 
-  $("#categories").innerHTML =
+  const categories =
+    $("#categories");
 
+  if (!categories) return;
+
+
+  categories.innerHTML =
     list.map(c => `
 
       <button
         class="cat ${c === activeCat ? "active" : ""}"
-        data-c="${c}"
+        data-c="${escapeHtml(c)}"
       >
-        ${c}
+        ${escapeHtml(c)}
       </button>
 
     `).join("");
@@ -327,109 +320,108 @@ function cats() {
           button.dataset.c;
 
         cats();
-
         render();
-
       };
 
     });
-
 }
 
 
 /* =========================================================
-   ТОВАРЫ
+   ЭКРАН ТОВАРОВ
 ========================================================= */
 
 function render() {
 
+  const productsEl =
+    $("#products");
+
+  if (!productsEl) return;
+
+
   const list =
-
     activeCat === "Все"
-
       ? products
-
       : products.filter(
-          p => p.cat === activeCat
+          p =>
+            p.cat === activeCat
         );
 
 
-  $("#products").innerHTML =
+  if (!list.length) {
 
-    list.length
+    productsEl.innerHTML = `
+      <div class="muted"
+           style="padding:30px;text-align:center">
+        📦 Товаров пока нет
+      </div>
+    `;
 
-      ? list.map(p => `
+    updateCartCount();
 
-        <article class="card">
+    return;
+  }
 
-          <img
-            class="pic"
-            src="${p.img}"
-            alt=""
-          >
 
-          <div class="info">
+  productsEl.innerHTML =
+    list.map(p => `
 
-            <div class="tag">
-              ${p.cat}
-            </div>
+      <article class="card">
 
-            <div class="title">
-              ${p.title}
-            </div>
+        <img
+          class="pic"
+          src="${escapeAttribute(p.img)}"
+          alt=""
+          onerror="this.src='https://placehold.co/900x900/27415c/ffffff?text=PUBG'"
+        >
 
-            <div class="price">
-              ${money(p.price)}
-            </div>
+        <div class="info">
 
-            <div class="buttons">
+          <div class="tag">
+            ${escapeHtml(p.cat)}
+          </div>
 
-              <button
-                class="primary"
-                onclick="add(${p.id})"
-              >
-                🛒 В корзину
-              </button>
+          <div class="title">
+            ${escapeHtml(p.title)}
+          </div>
 
-              <button
-                class="secondary"
-                onclick="view(${p.id})"
-              >
-                🎥 Обзор
-              </button>
+          <div class="price">
+            ${money(p.price)}
+          </div>
 
-              <button
-                class="secondary"
-                onclick="offerPrice(${p.id})"
-              >
-                💰 Своя цена
-              </button>
+          <div class="buttons">
 
-            </div>
+            <button
+              class="primary"
+              onclick="add(${Number(p.id)})"
+            >
+              🛒 В корзину
+            </button>
+
+            <button
+              class="secondary"
+              onclick="view(${Number(p.id)})"
+            >
+              🎥 Обзор
+            </button>
+
+            <button
+              class="secondary"
+              onclick="offerPrice(${Number(p.id)})"
+            >
+              💰 Своя цена
+            </button>
 
           </div>
 
-        </article>
-
-      `).join("")
-
-      :
-
-      `
-
-        <div
-          class="muted"
-          style="padding:30px;text-align:center"
-        >
-          📦 Товаров пока нет
         </div>
 
-      `;
+      </article>
+
+    `).join("");
 
 
-  $("#cartCount").textContent =
-    cart.length;
-
+  updateCartCount();
 }
 
 
@@ -439,31 +431,46 @@ function render() {
 
 window.add = function(id) {
 
-  if (
-    !cart.some(
-      x => Number(x) === Number(id)
-    )
-  ) {
+  id = Number(id);
 
-    cart.push(id);
 
-    saveCart();
-
-    render();
+  if (cart.includes(id)) {
 
     toast(
-      "Добавлено в корзину 🛒"
+      "Товар уже в корзине 🛒"
     );
 
-  } else {
-
-    toast(
-      "Товар уже в корзине"
-    );
-
+    return;
   }
 
+
+  cart.push(id);
+
+  saveCart();
+
+  updateCartCount();
+
+  toast(
+    "Добавлено в корзину 🛒"
+  );
 };
+
+
+/* =========================================================
+   СЧЁТЧИК КОРЗИНЫ
+========================================================= */
+
+function updateCartCount() {
+
+  const count =
+    $("#cartCount");
+
+  if (count) {
+
+    count.textContent =
+      cart.length;
+  }
+}
 
 
 /* =========================================================
@@ -472,20 +479,24 @@ window.add = function(id) {
 
 window.removeFromCart = function(id) {
 
-  cart = cart.filter(
-    x => Number(x) !== Number(id)
-  );
+  id = Number(id);
+
+  cart =
+    cart.filter(
+      item =>
+        Number(item) !== id
+    );
+
 
   saveCart();
 
-  render();
-
   openCart();
+
+  updateCartCount();
 
   toast(
     "Товар удалён из корзины"
   );
-
 };
 
 
@@ -524,7 +535,6 @@ window.view = function(id) {
   $("#modal").classList.remove(
     "hidden"
   );
-
 };
 
 
@@ -537,7 +547,6 @@ $("#closeModal").onclick = () => {
   $("#modal").classList.add(
     "hidden"
   );
-
 };
 
 
@@ -554,20 +563,6 @@ $("#modalCart").onclick = () => {
   $("#modal").classList.add(
     "hidden"
   );
-
-};
-
-
-/* =========================================================
-   ОБЗОР
-========================================================= */
-
-$("#modalReview").onclick = () => {
-
-  openTG(
-    "overview"
-  );
-
 };
 
 
@@ -575,7 +570,7 @@ $("#modalReview").onclick = () => {
    ПРЕДЛОЖИТЬ СВОЮ ЦЕНУ
 ========================================================= */
 
-function offerPrice(id) {
+window.offerPrice = function(id) {
 
   const product =
     products.find(
@@ -589,55 +584,58 @@ function offerPrice(id) {
 
   const price =
     prompt(
-      `Товар: ${product.title}\n\n` +
-      `Цена магазина: ${money(product.price)}\n\n` +
-      `Введите вашу цену:`
+      `Товар: ${product.title}\n\nКакую цену предлагаете?`
     );
 
 
   if (!price) return;
 
 
-  const message =
-
-    `💰 Здравствуйте! Хочу предложить свою цену.\n\n` +
-
-    `📦 Товар: ${product.title}\n` +
-
-    `🆔 ID товара: ${product.id}\n` +
-
-    `🏷 Категория: ${product.cat}\n` +
-
-    `💵 Цена магазина: ${money(product.price)}\n` +
-
-    `💰 Моя цена: ${price} грн.\n\n` +
-
-    `Жду ответа.`;
+  const cleanPrice =
+    price.trim();
 
 
-  contactMe(
-    message
-  );
-
-}
+  if (!cleanPrice) return;
 
 
-window.offerPrice =
-  offerPrice;
+  /*
+    Больше никаких sendData.
+    Просто открываем твой Telegram.
+  */
+
+  openProfile();
+};
 
 
 /* =========================================================
-   ПРЕДЛОЖИТЬ ЦЕНУ ИЗ МОДАЛКИ
+   КНОПКА "ПРЕДЛОЖИТЬ СВОЮ ЦЕНУ"
+   В ОКНЕ ТОВАРА
 ========================================================= */
 
 $("#modalOffer").onclick = () => {
 
   if (!selected) return;
 
-  offerPrice(
-    selected.id
-  );
+  const price =
+    prompt(
+      `Товар: ${selected.title}\n\nКакую цену предлагаете?`
+    );
 
+
+  if (!price) return;
+
+
+  openProfile();
+};
+
+
+/* =========================================================
+   КНОПКА ОБЗОР
+========================================================= */
+
+$("#modalReview").onclick = () => {
+
+  openTG("overview");
 };
 
 
@@ -645,83 +643,89 @@ $("#modalOffer").onclick = () => {
    ОТКРЫТЬ КОРЗИНУ
 ========================================================= */
 
+$("#openCart").onclick = () => {
+
+  openCart();
+};
+
+
+/* =========================================================
+   РЕНДЕР КОРЗИНЫ
+========================================================= */
+
 function openCart() {
 
-  const rows = cart
-
-    .map(id =>
-      products.find(
-        p =>
-          Number(p.id) === Number(id)
+  const rows =
+    cart
+      .map(id =>
+        products.find(
+          p =>
+            Number(p.id) ===
+            Number(id)
+        )
       )
-    )
-
-    .filter(Boolean);
+      .filter(Boolean);
 
 
-  $("#cartItems").innerHTML =
+  if (!rows.length) {
 
-    rows.length
+    $("#cartItems").innerHTML = `
 
-      ? rows.map(p => `
+      <div
+        class="muted"
+        style="padding:25px 0;text-align:center"
+      >
+        🛒 Корзина пустая
+      </div>
 
-          <div class="cart-row">
+    `;
 
-            <img
-              src="${p.img}"
-              alt=""
-            >
+  } else {
 
-            <div
-              style="
-                flex:1;
-                min-width:0;
-              "
-            >
+    $("#cartItems").innerHTML =
 
-              <b>
-                ${p.title}
-              </b>
+      rows.map(p => `
 
-              <span class="muted">
-                ${money(p.price)}
-              </span>
+        <div class="cart-row">
 
-            </div>
+          <img
+            src="${escapeAttribute(p.img)}"
+            onerror="this.src='https://placehold.co/300x300/27415c/ffffff?text=PUBG'"
+          >
+
+          <div
+            style="
+              flex:1;
+              min-width:0;
+            "
+          >
+
+            <b>
+              ${escapeHtml(p.title)}
+            </b>
+
+            <span class="muted">
+              ${money(p.price)}
+            </span>
 
             <button
               class="secondary"
-              onclick="removeFromCart(${p.id})"
-              style="
-                white-space:nowrap;
-                padding:8px 10px;
-              "
+              style="margin-top:8px"
+              onclick="removeFromCart(${Number(p.id)})"
             >
               🗑️ Удалить
             </button>
 
           </div>
 
-        `).join("")
+        </div>
 
-      :
-
-        `
-
-          <div
-            class="muted"
-            style="padding:25px 0"
-          >
-            Корзина пустая
-          </div>
-
-        `;
+      `).join("");
+  }
 
 
   $("#cartTotal").textContent =
-
     rows.length
-
       ? money(
           rows.reduce(
             (sum, p) =>
@@ -729,19 +733,13 @@ function openCart() {
             0
           )
         )
-
       : "";
 
 
   $("#cartModal")
     .classList
     .remove("hidden");
-
 }
-
-
-$("#openCart").onclick =
-  openCart;
 
 
 /* =========================================================
@@ -753,26 +751,25 @@ $("#closeCart").onclick = () => {
   $("#cartModal")
     .classList
     .add("hidden");
-
 };
 
 
 /* =========================================================
-   КУПИТЬ
+   КУПИТЬ / ОФОРМИТЬ ЗАКАЗ
 ========================================================= */
 
 $("#checkout").onclick = () => {
 
-  const rows = cart
-
-    .map(id =>
-      products.find(
-        p =>
-          Number(p.id) === Number(id)
+  const rows =
+    cart
+      .map(id =>
+        products.find(
+          p =>
+            Number(p.id) ===
+            Number(id)
+        )
       )
-    )
-
-    .filter(Boolean);
+      .filter(Boolean);
 
 
   if (!rows.length) {
@@ -782,50 +779,15 @@ $("#checkout").onclick = () => {
     );
 
     return;
-
   }
 
 
-  let message =
+  /*
+    Просто открываем личку.
+    Бот и WebAppData здесь больше не нужны.
+  */
 
-    "🛒 Здравствуйте! Хочу купить аккаунт(ы).\n\n";
-
-
-  rows.forEach((p, index) => {
-
-    message +=
-
-      `${index + 1}. ${p.title}\n` +
-
-      `🆔 ID: ${p.id}\n` +
-
-      `🏷 ${p.cat}\n` +
-
-      `💰 ${money(p.price)}\n\n`;
-
-  });
-
-
-  const total =
-
-    rows.reduce(
-      (sum, p) =>
-        sum + p.price,
-      0
-    );
-
-
-  message +=
-
-    `💵 ИТОГО: ${money(total)}\n\n` +
-
-    "Напишите мне по поводу покупки.";
-
-
-  contactMe(
-    message
-  );
-
+  openProfile();
 };
 
 
@@ -835,80 +797,64 @@ $("#checkout").onclick = () => {
 
 $("#sellBtn").onclick = () => {
 
-  $("#sellModal")
-    .classList
-    .remove("hidden");
+  /*
+    Вместо формы с sendData
+    сразу открываем твой профиль.
+  */
 
-};
-
-
-$("#closeSell").onclick = () => {
-
-  $("#sellModal")
-    .classList
-    .add("hidden");
-
-};
-
-
-$("#sendSell").onclick = () => {
-
-  const title =
-    $("#sellTitle")
-      .value
-      .trim();
-
-
-  const price =
-    $("#sellPrice")
-      .value
-      .trim();
-
-
-  const desc =
-    $("#sellDesc")
-      .value
-      .trim();
-
-
-  if (!title || !price) {
-
-    toast(
-      "Заполни название и цену"
-    );
-
-    return;
-
-  }
-
-
-  const message =
-
-    "📤 Здравствуйте! Хочу продать аккаунт.\n\n" +
-
-    `📦 Название: ${title}\n` +
-
-    `💰 Желаемая цена: ${price} грн.\n\n` +
-
-    `📝 Описание:\n${desc || "Не указано"}\n\n` +
-
-    "Жду вашего ответа.";
-
-
-  contactMe(
-    message
-  );
-
-
-  $("#sellModal")
-    .classList
-    .add("hidden");
-
+  openProfile();
 };
 
 
 /* =========================================================
-   СТАРТ
+   СТАРАЯ ФОРМА ПРОДАЖИ
+========================================================= */
+
+if ($("#closeSell")) {
+
+  $("#closeSell").onclick = () => {
+
+    $("#sellModal")
+      .classList
+      .add("hidden");
+
+  };
+}
+
+
+if ($("#sendSell")) {
+
+  $("#sendSell").onclick = () => {
+
+    openProfile();
+
+  };
+}
+
+
+/* =========================================================
+   ЗАЩИТА ТЕКСТА
+========================================================= */
+
+function escapeHtml(value) {
+
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+
+function escapeAttribute(value) {
+
+  return escapeHtml(value);
+}
+
+
+/* =========================================================
+   ЗАПУСК
 ========================================================= */
 
 loadProducts();
