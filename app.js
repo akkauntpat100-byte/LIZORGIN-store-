@@ -1,1136 +1,869 @@
 const tg = window.Telegram?.WebApp;
 
 if (tg) {
-  tg.ready();
-  tg.expand();
+tg.ready();
+tg.expand();
 }
 
-
-/* =========================================================
-   НАСТРОЙКИ
-========================================================= */
+// =========================================================
+// НАСТРОЙКИ
+// =========================================================
 
 const CONFIG = {
 
-  // ТВОЙ ПРОФИЛЬ
-  profile: "https://t.me/lizorgin",
+reviews: “https://t.me/reviews_lizorgin”,
 
-  // ТВОЙ TELEGRAM
-  telegram: "https://t.me/lizorgin_store",
+telegram: “https://t.me/lizorgin_store”,
 
-  // ОТЗЫВЫ
-  reviews: "https://t.me/reviews_lizorgin",
+overview: “https://t.me/lizorgin_store/10”,
 
-  // ПОСТ С ОБЗОРАМИ
-  overview: "https://t.me/lizorgin_store/10",
+// ТВОЙ ПРОФИЛЬ
+owner: “https://t.me/lizorgin”,
 
-  // SUPABASE
-  supabaseUrl:
-    "https://xmkmfchendnpuzjwnbmx.supabase.co",
-
-  supabaseKey:
-    "sb_publishable_zs7Jkd95b4Yyt4p_1FRCgw_xAwEG3LU"
-
+// ID твоего Telegram
+ownerId: “8523638381”
 };
-
 
 let products = [];
 
 let cart = JSON.parse(
-  localStorage.getItem("lizorgin_cart") || "[]"
+localStorage.getItem(“lizorgin_cart”) || “[]”
 );
 
-let activeCat = "Все";
+let activeCat = “Все”;
 
 let selected = null;
 
+const $ = (s) =>
+document.querySelector(s);
 
-/* =========================================================
-   HELPERS
-========================================================= */
+// =========================================================
+// ЦЕНА
+// =========================================================
 
-const $ = (selector) =>
-  document.querySelector(selector);
+function money(n) {
 
-
-function money(value) {
-
-  return `${Number(value || 0).toLocaleString("ru-RU")} грн.`;
-
+return ${Number(n).toLocaleString("ru-RU")} грн.;
 }
 
+// =========================================================
+// УВЕДОМЛЕНИЕ
+// =========================================================
 
 function toast(text) {
 
-  const el = $("#toast");
+const el = $(”#toast”);
 
-  if (!el) return;
+if (!el) return;
 
-  el.textContent = text;
+el.textContent = text;
 
-  el.classList.remove("hidden");
+el.classList.remove(“hidden”);
 
-  setTimeout(() => {
+setTimeout(() => {
 
-    el.classList.add("hidden");
+el.classList.add("hidden");
 
-  }, 1800);
-
+}, 1800);
 }
 
+// =========================================================
+// СОХРАНЕНИЕ КОРЗИНЫ
+// =========================================================
 
 function saveCart() {
 
-  localStorage.setItem(
-    "lizorgin_cart",
-    JSON.stringify(cart)
-  );
-
+localStorage.setItem(
+“lizorgin_cart”,
+JSON.stringify(cart)
+);
 }
 
+// =========================================================
+// ОТКРЫТЬ ТВОЙ TELEGRAM
+// =========================================================
 
-/* =========================================================
-   TELEGRAM
-========================================================= */
-
-function openTelegram(url) {
-
-  if (!url) return;
-
-  if (tg?.openTelegramLink) {
-
-    tg.openTelegramLink(url);
-
-  } else {
-
-    window.open(url, "_blank");
-
-  }
-
-}
-
+function openOwner() {
 
 /*
-   Открывает твою личку.
-
-   В сообщение автоматически вставляется информация
-   о товаре.
+Основной вариант.
+Именно твой профиль @lizorgin.
 */
 
-function contactOwner(message) {
+const url = CONFIG.owner;
 
-  const text = encodeURIComponent(message);
+try {
 
-  const url =
-    `${CONFIG.profile}?text=${text}`;
+if (tg && typeof tg.openTelegramLink === "function") {
+  tg.openTelegramLink(url);
+  return;
+}
 
-  openTelegram(url);
+} catch (error) {
+
+console.log(
+  "Telegram WebApp link error:",
+  error
+);
 
 }
 
+/*
+Запасной вариант.
+*/
 
-/* =========================================================
-   ЗАГРУЗКА ТОВАРОВ
-========================================================= */
+window.location.href = url;
+}
+
+window.openOwner = openOwner;
+
+// =========================================================
+// TELEGRAM ССЫЛКИ
+// =========================================================
+
+function openTG(kind) {
+
+const url = CONFIG[kind];
+
+if (!url) return;
+
+try {
+
+if (tg && typeof tg.openTelegramLink === "function") {
+  tg.openTelegramLink(url);
+  return;
+}
+
+} catch (error) {
+
+console.log(error);
+
+}
+
+window.location.href = url;
+}
+
+// =========================================================
+// ЗАГРУЗКА ТОВАРОВ
+// =========================================================
 
 async function loadProducts() {
 
-  try {
+try {
 
-    const url =
-      `${CONFIG.supabaseUrl}/rest/v1/accounts` +
-      `?select=*` +
-      `&status=eq.available` +
-      `&order=id.desc`;
-
-    const response = await fetch(
-      url,
-      {
-        method: "GET",
-
-        headers: {
-          "apikey": CONFIG.supabaseKey,
-          "Authorization":
-            `Bearer ${CONFIG.supabaseKey}`
-        }
-      }
-    );
-
-
-    if (!response.ok) {
-
-      console.error(
-        "SUPABASE ERROR:",
-        response.status,
-        await response.text()
-      );
-
-      showEmpty(
-        "❌ Не удалось загрузить товары"
-      );
-
-      return;
-
+const SUPABASE_URL =
+  "https://xmkmfchendnpuzjwnbmx.supabase.co";
+const SUPABASE_KEY =
+  "sb_publishable_zs7Jkd95b4Yyt4p_1FRCgw_xAwEG3LU";
+const url =
+  `${SUPABASE_URL}/rest/v1/accounts` +
+  `?select=*` +
+  `&status=eq.available` +
+  `&order=id.desc`;
+const response = await fetch(
+  url,
+  {
+    method: "GET",
+    headers: {
+      "apikey": SUPABASE_KEY,
+      "Authorization":
+        `Bearer ${SUPABASE_KEY}`,
+      "Content-Type":
+        "application/json"
     }
-
-
-    const data =
-      await response.json();
-
-
-    products =
-      data.map(product => ({
-
-        id:
-          product.id,
-
-        cat:
-          product.category ||
-          "Другое",
-
-        title:
-          product.title ||
-          "Аккаунт",
-
-        price:
-          Number(product.price || 0),
-
-        desc:
-          product.description ||
-          "",
-
-        img:
-          normalizeImage(
-            product.image_url
-          ),
-
-        review:
-          CONFIG.overview
-
-      }));
-
-
-    cats();
-
-    render();
-
-  } catch (error) {
-
-    console.error(
-      "LOAD PRODUCTS ERROR:",
-      error
-    );
-
-    showEmpty(
-      "❌ Ошибка загрузки товаров"
-    );
-
   }
-
-}
-
-
-/* =========================================================
-   ФОТО
-========================================================= */
-
-function normalizeImage(image) {
-
-  if (!image) {
-
-    return (
-      `${CONFIG.supabaseUrl}` +
-      `/storage/v1/object/public/product-images/` +
-      `default.jpg`
-    );
-
-  }
-
-
-  let value =
-    String(image).trim();
-
-
-  /*
-    Если в базе уже полный URL
-  */
-
-  if (
-    value.startsWith("http://") ||
-    value.startsWith("https://")
-  ) {
-
-    return value;
-
-  }
-
-
-  /*
-    Если в базе:
-    product-images/file.jpg
-  */
-
-  if (
-    value.startsWith("product-images/")
-  ) {
-
-    value =
-      value.replace(
-        "product-images/",
-        ""
-      );
-
-  }
-
-
-  /*
-    Если просто:
-    file.jpg
-  */
-
-  return (
-    `${CONFIG.supabaseUrl}` +
-    `/storage/v1/object/public/` +
-    `product-images/` +
-    value
+);
+if (!response.ok) {
+  console.error(
+    "SUPABASE ERROR:",
+    response.status,
+    await response.text()
   );
+  toast(
+    "❌ Ошибка загрузки товаров"
+  );
+  return;
+}
+const data =
+  await response.json();
+products =
+  data.map(p => ({
+    id:
+      p.id,
+    cat:
+      p.category || "Другое",
+    title:
+      p.title || "Аккаунт",
+    price:
+      Number(p.price || 0),
+    desc:
+      p.description || "",
+    img:
+      normalizeImage(p.image_url),
+    review:
+      CONFIG.overview
+  }));
+cats();
+render();
 
 }
 
+catch (error) {
 
-/* =========================================================
-   КАТЕГОРИИ
-========================================================= */
+console.error(
+  "LOAD PRODUCTS ERROR:",
+  error
+);
+toast(
+  "❌ Ошибка соединения"
+);
+
+}
+
+}
+
+// =========================================================
+// КАРТИНКИ
+// =========================================================
+
+function normalizeImage(url) {
+
+if (!url) {
+
+return (
+  "https://placehold.co/" +
+  "900x900/27415c/ffffff?text=PUBG"
+);
+
+}
+
+if (
+url.startsWith(“https://”) ||
+url.startsWith(“http://”)
+) {
+
+return url;
+
+}
+
+return (
+“https://placehold.co/” +
+“900x900/27415c/ffffff?text=PUBG”
+);
+
+}
+
+// =========================================================
+// КАТЕГОРИИ
+// =========================================================
 
 function cats() {
 
-  const categories = [
+const list = [
 
-    "Все",
+"Все",
+...new Set(
+  products.map(
+    p => p.cat
+  )
+)
 
-    ...new Set(
-      products.map(
-        product => product.cat
-      )
-    )
+];
 
-  ];
+$(”#categories”).innerHTML =
 
+list.map(c => `
+  <button
+    class="cat ${
+      c === activeCat
+        ? "active"
+        : ""
+    }"
+    data-c="${c}"
+  >
+    ${c}
+  </button>
+`).join("");
 
-  const container =
-    $("#categories");
+document
+.querySelectorAll(”.cat”)
+.forEach(button => {
 
-
-  if (!container) return;
-
-
-  container.innerHTML =
-    categories.map(category => `
-
-      <button
-        class="cat ${
-          category === activeCat
-            ? "active"
-            : ""
-        }"
-        data-c="${escapeHtml(category)}"
-      >
-        ${escapeHtml(category)}
-      </button>
-
-    `).join("");
-
-
-  document
-    .querySelectorAll(".cat")
-    .forEach(button => {
-
-      button.onclick = () => {
-
-        activeCat =
-          button.dataset.c;
-
-        cats();
-
-        render();
-
-      };
-
-    });
+  button.onclick = () => {
+    activeCat =
+      button.dataset.c;
+    cats();
+    render();
+  };
+});
 
 }
 
-
-/* =========================================================
-   ТОВАРЫ
-========================================================= */
+// =========================================================
+// ТОВАРЫ
+// =========================================================
 
 function render() {
 
-  const container =
-    $("#products");
+const list =
 
-  if (!container) return;
-
-
-  const list =
-    activeCat === "Все"
-
-      ? products
-
-      : products.filter(
-          product =>
-            product.cat === activeCat
-        );
-
-
-  if (!list.length) {
-
-    showEmpty(
-      "📦 Товаров пока нет"
+activeCat === "Все"
+  ? products
+  : products.filter(
+      p =>
+        p.cat === activeCat
     );
 
-    return;
+if (!list.length) {
 
-  }
-
-
-  container.innerHTML =
-
-    list.map(product => `
-
-      <article class="card">
-
-        <img
-          class="pic"
-          src="${escapeAttribute(product.img)}"
-          alt=""
-          onerror="this.src='https://placehold.co/900x900/27415c/ffffff?text=PUBG'"
-        >
-
-        <div class="info">
-
-          <div class="tag">
-            ${escapeHtml(product.cat)}
-          </div>
-
-          <div class="title">
-            ${escapeHtml(product.title)}
-          </div>
-
-          <div class="price">
-            ${money(product.price)}
-          </div>
-
-          <div class="buttons">
-
-            <button
-              class="primary"
-              onclick="add(${product.id})"
-            >
-              🛒 В корзину
-            </button>
-
-            <button
-              class="secondary"
-              onclick="view(${product.id})"
-            >
-              🎥 Обзор
-            </button>
-
-            <button
-              class="secondary"
-              onclick="offerPrice(${product.id})"
-            >
-              💰 Своя цена
-            </button>
-
-          </div>
-
-        </div>
-
-      </article>
-
-    `).join("");
-
-
-  updateCartCount();
+$("#products").innerHTML = `
+  <div
+    class="muted"
+    style="
+      padding:30px;
+      text-align:center;
+    "
+  >
+    📦 Товаров пока нет
+  </div>
+`;
+$("#cartCount").textContent =
+  cart.length;
+return;
 
 }
 
+$(”#products”).innerHTML =
 
-/* =========================================================
-   ПУСТОЙ СПИСОК
-========================================================= */
-
-function showEmpty(text) {
-
-  const container =
-    $("#products");
-
-  if (!container) return;
-
-
-  container.innerHTML = `
-
-    <div
-      class="muted"
-      style="
-        padding:30px;
-        text-align:center;
-        width:100%;
+list.map(p => `
+  <article class="card">
+    <img
+      class="pic"
+      src="${p.img}"
+      alt=""
+      onerror="
+        this.src=
+        'https://placehold.co/900x900/27415c/ffffff?text=PUBG'
       "
     >
-      ${text}
+    <div class="info">
+      <div class="tag">
+        ${p.cat}
+      </div>
+      <div class="title">
+        ${p.title}
+      </div>
+      <div class="price">
+        ${money(p.price)}
+      </div>
+      <div
+        class="buttons"
+        style="
+          display:flex;
+          flex-direction:column;
+          gap:8px;
+        "
+      >
+        <button
+          class="primary"
+          onclick="add(${p.id})"
+        >
+          🛒 В корзину
+        </button>
+        <button
+          class="secondary"
+          onclick="view(${p.id})"
+        >
+          🎥 Обзор
+        </button>
+        <button
+          class="secondary"
+          onclick="offerProduct(${p.id})"
+        >
+          💰 Предложить свою цену
+        </button>
+      </div>
     </div>
+  </article>
+`).join("");
 
-  `;
-
-}
-
-
-/* =========================================================
-   КОРЗИНА
-========================================================= */
-
-function updateCartCount() {
-
-  const counter =
-    $("#cartCount");
-
-  if (!counter) return;
-
-  counter.textContent =
-    cart.length;
+$(”#cartCount”).textContent =
+cart.length;
 
 }
 
+// =========================================================
+// ПРЕДЛОЖИТЬ СВОЮ ЦЕНУ
+// =========================================================
 
-window.add = function(id) {
+window.offerProduct = function(id) {
 
-  id = Number(id);
+const product =
+products.find(
+p =>
+Number(p.id) ===
+Number(id)
+);
 
+if (!product) {
 
-  if (
-    !cart.includes(id)
-  ) {
+toast(
+  "Товар не найден"
+);
+return;
 
-    cart.push(id);
+}
 
-    saveCart();
+const price = prompt(
 
-    updateCartCount();
+`💰 ${product.title}\n\n` +
+`Цена магазина: ${money(product.price)}\n\n` +
+`Введите свою цену в грн.`
 
-    toast(
-      "Добавлено в корзину 🛒"
-    );
+);
 
-  } else {
+if (
+price === null ||
+price.trim() === “”
+) {
 
-    toast(
-      "Товар уже в корзине"
-    );
+return;
 
-  }
+}
+
+const value =
+Number(
+price
+.replace(”,”, “.”)
+.trim()
+);
+
+if (
+!Number.isFinite(value) ||
+value <= 0
+) {
+
+toast(
+  "❌ Введите правильную цену"
+);
+return;
+
+}
+
+/*
+Здесь НЕ используем sendData.
+
+Просто открываем твой профиль.
+
+*/
+
+openOwner();
+
+/*
+Сохраняем информацию локально,
+чтобы пользователь не потерял
+введённую цену.
+*/
+
+localStorage.setItem(
+
+"lizorgin_last_offer",
+JSON.stringify({
+  product:
+    product.title,
+  product_id:
+    product.id,
+  price:
+    value
+})
+
+);
 
 };
 
+window.offerPrice = window.offerProduct;
 
-/*
-   УДАЛЕНИЕ ИЗ КОРЗИНЫ
-*/
+// =========================================================
+// ДОБАВИТЬ В КОРЗИНУ
+// =========================================================
 
-window.removeFromCart =
-  function(id) {
+window.add = function(id) {
 
-    id = Number(id);
+if (
+!cart.some(
+item =>
+Number(item) ===
+Number(id)
+)
+) {
 
-    cart =
-      cart.filter(
-        item =>
-          Number(item) !== id
-      );
+cart.push(id);
+saveCart();
+render();
+toast(
+  "Добавлено в корзину 🛒"
+);
 
-    saveCart();
+} else {
 
-    openCart();
+toast(
+  "Товар уже в корзине"
+);
 
-    updateCartCount();
+}
 
-    toast(
-      "Товар удалён из корзины"
-    );
+};
 
-  };
+// =========================================================
+// УДАЛИТЬ ИЗ КОРЗИНЫ
+// =========================================================
 
+window.removeFromCart = function(id) {
 
-function openCart() {
+cart =
+cart.filter(
+item =>
+Number(item) !==
+Number(id)
+);
 
-  const rows = cart
+saveCart();
 
-    .map(id =>
-      products.find(
-        product =>
-          Number(product.id) ===
-          Number(id)
-      )
+render();
+
+renderCart();
+
+toast(
+“Товар удалён 🗑️”
+);
+
+};
+
+// =========================================================
+// ПРОСМОТР
+// =========================================================
+
+window.view = function(id) {
+
+selected =
+products.find(
+p =>
+Number(p.id) ===
+Number(id)
+);
+
+if (!selected) return;
+
+$(”#modalImg”).src =
+selected.img;
+
+$(”#modalCat”).textContent =
+selected.cat;
+
+$(”#modalTitle”).textContent =
+selected.title;
+
+$(”#modalDesc”).textContent =
+selected.desc;
+
+$(”#modalPrice”).textContent =
+money(selected.price);
+
+$(”#modal”).classList.remove(
+“hidden”
+);
+
+};
+
+// =========================================================
+// ЗАКРЫТЬ MODAL
+// =========================================================
+
+$(”#closeModal”).onclick = () => {
+
+$(”#modal”).classList.add(
+“hidden”
+);
+
+};
+
+// =========================================================
+// MODAL — КОРЗИНА
+// =========================================================
+
+$(”#modalCart”).onclick = () => {
+
+if (!selected) return;
+
+add(selected.id);
+
+$(”#modal”).classList.add(
+“hidden”
+);
+
+};
+
+// =========================================================
+// MODAL — ОБЗОР
+// =========================================================
+
+$(”#modalReview”).onclick = () => {
+
+openTG(“overview”);
+
+};
+
+// =========================================================
+// MODAL — СВОЯ ЦЕНА
+// =========================================================
+
+$(”#modalOffer”).onclick = () => {
+
+if (!selected) return;
+
+offerProduct(
+selected.id
+);
+
+};
+
+// =========================================================
+// КОРЗИНА
+// =========================================================
+
+function renderCart() {
+
+const rows =
+
+cart
+  .map(id =>
+    products.find(
+      p =>
+        Number(p.id) ===
+        Number(id)
     )
+  )
+  .filter(Boolean);
 
-    .filter(Boolean);
+if (!rows.length) {
 
-
-  const items =
-    $("#cartItems");
-
-
-  if (!items) return;
-
-
-  if (!rows.length) {
-
-    items.innerHTML = `
-
-      <div
-        class="muted"
-        style="padding:25px 0"
-      >
-        Корзина пустая
-      </div>
-
-    `;
-
-  } else {
-
-    items.innerHTML =
-
-      rows.map(product => `
-
-        <div
-          class="cart-row"
-          style="
-            display:flex;
-            align-items:center;
-            gap:12px;
-            margin-bottom:12px;
-          "
-        >
-
-          <img
-            src="${escapeAttribute(product.img)}"
-            style="
-              width:60px;
-              height:60px;
-              object-fit:cover;
-              border-radius:10px;
-            "
-            onerror="this.src='https://placehold.co/200x200/27415c/ffffff?text=PUBG'"
-          >
-
-          <div
-            style="
-              flex:1;
-              min-width:0;
-            "
-          >
-
-            <b>
-              ${escapeHtml(product.title)}
-            </b>
-
-            <span
-              class="muted"
-              style="
-                display:block;
-                margin-top:4px;
-              "
-            >
-              ${money(product.price)}
-            </span>
-
-          </div>
-
-          <button
-            class="secondary"
-            onclick="removeFromCart(${product.id})"
-            style="
-              padding:8px 10px;
-              min-width:auto;
-            "
-          >
-            🗑️
-          </button>
-
-        </div>
-
-      `).join("");
-
-  }
-
-
-  const total =
-    $("#cartTotal");
-
-
-  if (total) {
-
-    total.textContent =
-      rows.length
-
-        ? money(
-            rows.reduce(
-              (sum, product) =>
-                sum + product.price,
-              0
-            )
-          )
-
-        : "";
-
-  }
-
-
-  $("#cartModal")
-    ?.classList
-    .remove("hidden");
+$("#cartItems").innerHTML = `
+  <div
+    class="muted"
+    style="padding:25px 0"
+  >
+    Корзина пустая
+  </div>
+`;
+$("#cartTotal").textContent = "";
+return;
 
 }
 
+$(”#cartItems”).innerHTML =
 
-/* =========================================================
-   КУПИТЬ
-========================================================= */
+rows.map(p => `
+  <div
+    class="cart-row"
+    style="
+      display:flex;
+      align-items:center;
+      gap:10px;
+    "
+  >
+    <img
+      src="${p.img}"
+      style="
+        width:55px;
+        height:55px;
+        object-fit:cover;
+        border-radius:10px;
+      "
+    >
+    <div
+      style="
+        flex:1;
+        min-width:0;
+      "
+    >
+      <b>
+        ${p.title}
+      </b>
+      <span class="muted">
+        ${money(p.price)}
+      </span>
+    </div>
+    <button
+      class="secondary"
+      onclick="
+        removeFromCart(${p.id})
+      "
+      style="
+        white-space:nowrap;
+        padding:8px 10px;
+      "
+    >
+      🗑️
+    </button>
+  </div>
+`).join("");
 
-function buyProduct(product) {
+$(”#cartTotal”).textContent =
 
-  if (!product) return;
-
-
-  contactOwner(
-    `Здравствуйте! Хочу купить аккаунт.
-
-📦 ${product.title}
-🆔 ID: ${product.id}
-💰 Цена: ${product.price} грн.
-
-Отправляю сообщение из LIZORGIN STORE.`
-  );
+money(
+  rows.reduce(
+    (sum, p) =>
+      sum + p.price,
+    0
+  )
+);
 
 }
 
+// =========================================================
+// ОТКРЫТЬ КОРЗИНУ
+// =========================================================
 
-/* =========================================================
-   СВОЯ ЦЕНА
-========================================================= */
+$(”#openCart”).onclick = () => {
 
-window.offerPrice =
-  function(id) {
+renderCart();
 
-    const product =
-      products.find(
-        item =>
-          Number(item.id) ===
-          Number(id)
-      );
+$(”#cartModal”)
+.classList
+.remove(“hidden”);
 
+};
 
-    if (!product) return;
+// =========================================================
+// ЗАКРЫТЬ КОРЗИНУ
+// =========================================================
 
+$(”#closeCart”).onclick = () => {
 
-    const price =
-      prompt(
-        `Предложите свою цену за "${product.title}":`
-      );
+$(”#cartModal”)
+.classList
+.add(“hidden”);
 
+};
 
-    if (
-      price === null ||
-      !price.trim()
-    ) {
+// =========================================================
+// КУПИТЬ
+// =========================================================
 
-      return;
+$(”#checkout”).onclick = () => {
 
-    }
+const rows =
 
-
-    contactOwner(
-      `Здравствуйте! Хочу предложить свою цену.
-
-📦 ${product.title}
-🆔 ID: ${product.id}
-
-💰 Моя цена: ${price} грн.
-
-Отправлено из LIZORGIN STORE.`
-    );
-
-  };
-
-
-/* =========================================================
-   ПРОСМОТР ТОВАРА
-========================================================= */
-
-window.view =
-  function(id) {
-
-    selected =
-      products.find(
-        product =>
-          Number(product.id) ===
-          Number(id)
-      );
-
-
-    if (!selected) return;
-
-
-    $("#modalImg").src =
-      selected.img;
-
-    $("#modalCat").textContent =
-      selected.cat;
-
-    $("#modalTitle").textContent =
-      selected.title;
-
-    $("#modalDesc").textContent =
-      selected.desc;
-
-    $("#modalPrice").textContent =
-      money(selected.price);
-
-
-    $("#modal")
-      .classList
-      .remove("hidden");
-
-  };
-
-
-/* =========================================================
-   МОДАЛЬНОЕ ОКНО
-========================================================= */
-
-$("#closeModal").onclick =
-  () => {
-
-    $("#modal")
-      .classList
-      .add("hidden");
-
-  };
-
-
-/*
-   Кнопка "В корзину"
-*/
-
-$("#modalCart").onclick =
-  () => {
-
-    if (!selected) return;
-
-    add(selected.id);
-
-    $("#modal")
-      .classList
-      .add("hidden");
-
-  };
-
-
-/*
-   Кнопка "Смотреть обзор"
-*/
-
-$("#modalReview").onclick =
-  () => {
-
-    openTelegram(
-      selected?.review ||
-      CONFIG.overview
-    );
-
-  };
-
-
-/*
-   Кнопка "Предложить свою цену"
-*/
-
-$("#modalOffer").onclick =
-  () => {
-
-    if (!selected) return;
-
-    offerPrice(
-      selected.id
-    );
-
-  };
-
-
-/*
-   ДОБАВЛЯЕМ КНОПКУ ПОКУПКИ
-   В модальное окно.
-
-   Она открывает твою личку.
-*/
-
-function setupModalBuyButton() {
-
-  const actions =
-    document.querySelector(
-      ".actions"
-    );
-
-
-  if (!actions) return;
-
-
-  if (
-    document.getElementById(
-      "modalBuy"
+cart
+  .map(id =>
+    products.find(
+      p =>
+        Number(p.id) ===
+        Number(id)
     )
-  ) return;
+  )
+  .filter(Boolean);
 
+if (!rows.length) {
 
-  const button =
-    document.createElement(
-      "button"
-    );
-
-
-  button.id =
-    "modalBuy";
-
-  button.className =
-    "primary";
-
-  button.textContent =
-    "💳 Купить";
-
-
-  button.onclick =
-    () => {
-
-      buyProduct(selected);
-
-    };
-
-
-  actions.insertBefore(
-    button,
-    actions.firstChild
-  );
+toast(
+  "Корзина пустая"
+);
+return;
 
 }
-
-
-/* =========================================================
-   КОРЗИНА
-========================================================= */
-
-$("#openCart").onclick =
-  () => {
-
-    openCart();
-
-  };
-
-
-$("#closeCart").onclick =
-  () => {
-
-    $("#cartModal")
-      .classList
-      .add("hidden");
-
-  };
-
 
 /*
-   Оформление заказа.
+Никакого sendData.
 
-   Никакого sendData.
-   Просто открываем твою личку.
+Сразу открываем твой профиль.
+
 */
 
-$("#checkout").onclick =
-  () => {
+openOwner();
 
-    const rows = cart
+};
 
-      .map(id =>
-        products.find(
-          product =>
-            Number(product.id) ===
-            Number(id)
-        )
-      )
+// =========================================================
+// ПРОДАЖА СВОЕГО АККАУНТА
+// =========================================================
 
-      .filter(Boolean);
+$(”#sellBtn”).onclick = () => {
 
+$(”#sellModal”)
+.classList
+.remove(“hidden”);
 
-    if (!rows.length) {
+};
 
-      toast(
-        "Корзина пустая"
-      );
+$(”#closeSell”).onclick = () => {
 
-      return;
+$(”#sellModal”)
+.classList
+.add(“hidden”);
 
-    }
+};
 
+$(”#sendSell”).onclick = () => {
 
-    const lines =
-      rows.map(
-        product =>
-          `📦 ${product.title}
-🆔 ID: ${product.id}
-💰 ${product.price} грн.`
-      );
+const title =
+$(”#sellTitle”)
+.value
+.trim();
 
+const price =
+$(”#sellPrice”)
+.value
+.trim();
 
-    contactOwner(
-      `Здравствуйте! Хочу купить аккаунты из корзины.
+const desc =
+$(”#sellDesc”)
+.value
+.trim();
 
-${lines.join("\n\n")}
+if (!title || !price) {
 
-💵 Итого: ${
-        rows.reduce(
-          (sum, product) =>
-            sum + product.price,
-          0
-        )
-      } грн.
-
-Отправлено из LIZORGIN STORE.`
-    );
-
-  };
-
-
-/* =========================================================
-   ПРОДАЖА СВОЕГО АККАУНТА
-========================================================= */
-
-$("#sellBtn").onclick =
-  () => {
-
-    $("#sellModal")
-      .classList
-      .remove("hidden");
-
-  };
-
-
-$("#closeSell").onclick =
-  () => {
-
-    $("#sellModal")
-      .classList
-      .add("hidden");
-
-  };
-
-
-$("#sendSell").onclick =
-  () => {
-
-    const title =
-      $("#sellTitle")
-        .value
-        .trim();
-
-
-    const price =
-      $("#sellPrice")
-        .value
-        .trim();
-
-
-    const desc =
-      $("#sellDesc")
-        .value
-        .trim();
-
-
-    if (
-      !title ||
-      !price
-    ) {
-
-      toast(
-        "Заполни название и цену"
-      );
-
-      return;
-
-    }
-
-
-    contactOwner(
-      `Здравствуйте! Хочу предложить свой аккаунт.
-
-📦 Название: ${title}
-💰 Цена: ${price} грн.
-
-📝 Описание:
-${desc || "Не указано"}
-
-Отправлено через LIZORGIN STORE.`
-    );
-
-
-    $("#sellModal")
-      .classList
-      .add("hidden");
-
-  };
-
-
-/* =========================================================
-   ССЫЛКИ
-========================================================= */
-
-window.openTG =
-  function(kind) {
-
-    openTelegram(
-      CONFIG[kind]
-    );
-
-  };
-
-
-/* =========================================================
-   БЕЗОПАСНЫЙ ВЫВОД
-========================================================= */
-
-function escapeHtml(value) {
-
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
+toast(
+  "Заполни название и цену"
+);
+return;
 
 }
 
+const offer = {
 
-function escapeAttribute(value) {
+type:
+  "sell_account",
+title:
+  title,
+price:
+  price,
+description:
+  desc
 
-  return escapeHtml(value);
+};
 
-}
+localStorage.setItem(
 
+"lizorgin_sell_offer",
+JSON.stringify(offer)
 
-/* =========================================================
-   ЗАПУСК
-========================================================= */
+);
 
-setupModalBuyButton();
+/*
+Открываем именно твой профиль.
+*/
+
+openOwner();
+
+$(”#sellModal”)
+.classList
+.add(“hidden”);
+
+};
+
+// =========================================================
+// ЗАПУСК
+// =========================================================
 
 loadProducts();
